@@ -17,16 +17,6 @@ namespace Ogre {
 	/** The folder to save the compiled scripts in binary format */
 	const String scriptCacheFolder = ".scriptCache";
 
-	/** 
-	 * This class registers and listens to various resource and compilation events and 
-	 * handles loading/saving of the binary script from disk.  
-	 * A cache folder is created in the working directory where the compiled scripts are dumped 
-	 * to disk for later use. Whenever a text bases script is compiled, its AST in memory is saved to disk.
-	 * Later when this script needs to be compiled, it would be skipped in favour of its corresponding binary version
-	 * which is be directly loaded from disk and sent to the translators.
-	 * The text based scripts can also be replaced with the binary version by removing them 
-	 * and registering the cache folder in resources.cfg
-	 */
 	ScriptSerializerManager::ScriptSerializerManager()
 	{
 		mCompiler = OGRE_NEW ScriptCompiler();
@@ -86,6 +76,16 @@ namespace Ogre {
 				skipThisScript = false;
 				return;
 			}
+
+			// Check if this script was modified it was last compiled
+			size_t binaryTimestamp = getBinaryTimeStamp(binaryFilename);
+			size_t scriptTimestamp = ResourceGroupManager::getSingleton().resourceModifiedTime(mActiveResourceGroup, scriptName);
+
+			if (scriptTimestamp > binaryTimestamp) {
+				LogManager::getSingleton().logMessage("File Changed. Re-parsing file: " + scriptName);
+				skipThisScript = false;
+				return;
+			}
 		}
 
 		// Load the compiled AST from the binary script file
@@ -107,12 +107,21 @@ namespace Ogre {
 		bool continueParsing = true;
 		return continueParsing;
 	}
+	
+	time_t ScriptSerializerManager::getBinaryTimeStamp(const String& filename) {
+		DataStreamPtr stream = mCacheArchive->open(filename);
+		ScriptBlock::ScriptHeader header;
+		stream->read(reinterpret_cast<char*>(&header), sizeof(ScriptBlock::ScriptHeader));
+		stream->close();
+		return header.lastModifiedTime;
+	}
 
 	void ScriptSerializerManager::saveAstToDisk(const String& filename, const AbstractNodeListPtr& ast) {
 		// A text script was just parsed. Save the compiled AST to disk
 		DataStreamPtr stream = mCacheArchive->create(filename);
 		ScriptSerializer* serializer = OGRE_NEW ScriptSerializer();
-		serializer->serialize(stream, ast);
+		size_t scriptTimestamp = ResourceGroupManager::getSingleton().resourceModifiedTime(mActiveResourceGroup, mActiveScriptName);
+		serializer->serialize(stream, ast, scriptTimestamp);
 		OGRE_DELETE serializer;
 		stream->close();
 	}

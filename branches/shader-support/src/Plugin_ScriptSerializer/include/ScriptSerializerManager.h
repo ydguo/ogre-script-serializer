@@ -5,7 +5,17 @@
 namespace Ogre {
 
 	class ScriptSerializer;
-
+	
+	/** 
+	 * This class registers and listens to various resource and compilation events and 
+	 * handles loading/saving of the binary script from disk.  
+	 * A cache folder is created in the working directory where the compiled scripts are dumped 
+	 * to disk for later use. Whenever a text bases script is compiled, its AST in memory is saved to disk.
+	 * Later when this script needs to be compiled, it would be skipped in favour of its corresponding binary version
+	 * which is be directly loaded from disk and sent to the translators.
+	 * The text based scripts can also be replaced with the binary version by removing them 
+	 * and registering the cache folder in resources.cfg
+	 */
 	class ScriptSerializerManager : public ScriptSerializerManagerAlloc, public ResourceGroupListener, public ScriptCompilerListener
 	{
 	public:
@@ -34,6 +44,7 @@ namespace Ogre {
 		bool isBinaryScript(const String& filename);
 		void saveAstToDisk(const String& filename, const AbstractNodeListPtr& ast);
 		AbstractNodeListPtr loadAstFromDisk(const String& filename);
+		time_t getBinaryTimeStamp(const String& filename);
 
 	private:
 		ScriptSerializer* mSerializer;
