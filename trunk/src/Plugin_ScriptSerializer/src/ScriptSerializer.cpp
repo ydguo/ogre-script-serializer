@@ -11,6 +11,7 @@ using namespace std;
 namespace Ogre {
 
 	const uint32 magicCode = ('O' | 'G' << 8 | 'R' << 16 | 'E' << 24 );
+	const uint32 version = 0x0001;
 
 	ScriptSerializer::ScriptSerializer(void) : blockIdCounter(0) {
 		stringTable = OGRE_NEW StringTable();
@@ -87,12 +88,15 @@ namespace Ogre {
 	void ScriptSerializer::writeBlock(const DataStreamPtr& stream, BlockEntry* entry) {
 		if (entry->blockClass == BC_Transition) {
 			TransitionBlockEntry* transitionEntry = serializer_cast<TransitionBlockEntry*>(entry);
+			ScriptBlockHeader blockHeader;
+			blockHeader.blockID = ++blockIdCounter;
+			blockHeader.blockClass = BC_Transition;
+			blockHeader.blockType = 0;		// Not used
+
 			TransitionBlock block;
-			block.header.blockID = ++blockIdCounter;
-			block.header.blockClass = BC_Transition;
-			block.header.blockType = 0;		// Not used
 			block.direction = transitionEntry->direction;
 			block.userData = transitionEntry->userData;
+			writeToStream(stream, blockHeader);
 			writeToStream(stream, block);
 		}
 		else if (entry->blockClass == BC_Node) {
@@ -100,32 +104,40 @@ namespace Ogre {
 			AbstractNodePtr node = nodeEntry->node;
 			if (node->type == ANT_ATOM) {
 				AtomAbstractNode* atomNode = serializer_cast<AtomAbstractNode*>(node.get());
+				ScriptBlockHeader blockHeader;
+				blockHeader.blockClass = BC_Node;
+				blockHeader.blockType = ANT_ATOM;
+				blockHeader.blockID = ++blockIdCounter;
+
 				AtomAbstractNodeBlock block;
-				block.nodeInfo.header.blockClass = BC_Node;
-				block.nodeInfo.header.blockType = ANT_ATOM;
-				block.nodeInfo.header.blockID = ++blockIdCounter;
 				block.nodeInfo.lineNumber = atomNode->line;
 				block.id = atomNode->id;
 				block.value = stringTable->registerString(atomNode->value);
+				writeToStream(stream, blockHeader);
 				writeToStream(stream, block);
 			}
 			else if (node->type == ANT_PROPERTY) {
 				PropertyAbstractNode* propertyNode = serializer_cast<PropertyAbstractNode*>(node.get());
+				ScriptBlockHeader blockHeader;
+				blockHeader.blockClass = BC_Node;
+				blockHeader.blockType = ANT_PROPERTY;
+				blockHeader.blockID = ++blockIdCounter;
+
 				PropertyAbstractNodeBlock block;
-				block.nodeInfo.header.blockClass = BC_Node;
-				block.nodeInfo.header.blockType = ANT_PROPERTY;
-				block.nodeInfo.header.blockID = ++blockIdCounter;
 				block.nodeInfo.lineNumber = propertyNode->line;
 				block.id = propertyNode->id;
 				block.name = stringTable->registerString(propertyNode->name);
+				writeToStream(stream, blockHeader);
 				writeToStream(stream, block);
 			}
 			else if (node->type == ANT_OBJECT) {
 				ObjectAbstractNode* objectNode = serializer_cast<ObjectAbstractNode*>(node.get());
+				ScriptBlockHeader blockHeader;
+				blockHeader.blockClass = BC_Node;
+				blockHeader.blockType = ANT_OBJECT;
+				blockHeader.blockID = ++blockIdCounter;
+
 				ObjectAbstractNodeBlock block;
-				block.nodeInfo.header.blockClass = BC_Node;
-				block.nodeInfo.header.blockType = ANT_OBJECT;
-				block.nodeInfo.header.blockID = ++blockIdCounter;
 				block.nodeInfo.lineNumber = objectNode->line;
 				block.name = stringTable->registerString(objectNode->name);
 				block.cls = stringTable->registerString(objectNode->cls);
@@ -133,6 +145,7 @@ namespace Ogre {
 				block.abstract = objectNode->abstract;
 				block.bases.count = objectNode->bases.size();
 				block.environmentVars.count = objectNode->getVariables().size();
+				writeToStream(stream, blockHeader);
 				writeToStream(stream, block);
 
 				// Write out the "bases" list
@@ -183,8 +196,8 @@ namespace Ogre {
 		while (true) {
 			ScriptBlockHeader blockHeader;
 			readFromStream(stream, blockHeader);
-			int headerSize = sizeof(blockHeader);
-			stream->skip(-headerSize);
+			//int headerSize = sizeof(blockHeader);
+			//stream->skip(-headerSize);
 
 			if (blockHeader.blockClass == BC_Transition) {
 				TransitionBlock block;
@@ -308,12 +321,16 @@ namespace Ogre {
 	}
 
 	void ScriptSerializer::writeStringTable(const DataStreamPtr& stream) {
+		ScriptBlockHeader blockHeader;
+		blockHeader.blockID = ++blockIdCounter;
+		blockHeader.blockClass = BC_StringTable;
+		blockHeader.blockType = 0;		// Not used
+
 		StringTableBlock block;
-		block.header.blockID = ++blockIdCounter;
-		block.header.blockClass = BC_StringTable;
-		block.header.blockType = 0;		// Not used
 		StringTable::ResourceTable table = stringTable->getTable();
 		block.count = table.size();
+
+		writeToStream(stream, blockHeader);
 		writeToStream(stream, block);
 
 		for (StringTable::ResourceTable::iterator it = table.begin(); it != table.end(); it++) {
@@ -329,11 +346,15 @@ namespace Ogre {
 
 	
 	void ScriptSerializer::readStringTable(const DataStreamPtr& stream) {
-		StringTableBlock block;
-		readFromStream(stream, block);
-		if (block.header.blockClass != BC_StringTable) {
+		ScriptBlockHeader blockHeader;
+		readFromStream(stream, blockHeader);
+
+		if (blockHeader.blockClass != BC_StringTable) {
 			OGRE_EXCEPT(Exception::ERR_INVALID_STATE, "Error reading String Table", "ScriptSerializer::readStringTable");
 		}
+
+		StringTableBlock block;
+		readFromStream(stream, block);
 
 		for (int i = 0; i < block.count; i++) {
 			ResourceID id;
