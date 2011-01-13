@@ -18,7 +18,7 @@ namespace Ogre {
 		ScriptSerializer(void);
 		~ScriptSerializer(void);
 
-		void serialize(const DataStreamPtr& stream, const AbstractNodeListPtr& ast);
+		void serialize(const DataStreamPtr& stream, const AbstractNodeListPtr& ast, size_t lastModifiedDate);
 		AbstractNodeListPtr deserialize(const DataStreamPtr& stream);
 
 
@@ -59,8 +59,8 @@ namespace Ogre {
 
 		struct ScriptHeader {
 			uint32 magic;
-			//uint16 version;
-			//size_t lastModifiedTime;
+			uint16 version;
+			size_t lastModifiedTime;
 			uint64 stringTableOffset;
 		};
 

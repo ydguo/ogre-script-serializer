@@ -34,6 +34,7 @@ namespace Ogre {
 		bool isBinaryScript(const String& filename);
 		void saveAstToDisk(const String& filename, const AbstractNodeListPtr& ast);
 		AbstractNodeListPtr loadAstFromDisk(const String& filename);
+		time_t getBinaryTimeStamp(const String& filename);
 
 	private:
 		ScriptSerializer* mSerializer;

@@ -86,6 +86,16 @@ namespace Ogre {
 				skipThisScript = false;
 				return;
 			}
+
+			// Check if this script was modified it was last compiled
+			size_t binaryTimestamp = getBinaryTimeStamp(binaryFilename);
+			size_t scriptTimestamp = ResourceGroupManager::getSingleton().resourceModifiedTime(mActiveResourceGroup, scriptName);
+
+			if (scriptTimestamp > binaryTimestamp) {
+				LogManager::getSingleton().logMessage("File Changed. Re-parsing file: " + scriptName);
+				skipThisScript = false;
+				return;
+			}
 		}
 
 		// Load the compiled AST from the binary script file
@@ -107,12 +117,21 @@ namespace Ogre {
 		bool continueParsing = true;
 		return continueParsing;
 	}
+	
+	time_t ScriptSerializerManager::getBinaryTimeStamp(const String& filename) {
+		DataStreamPtr stream = mCacheArchive->open(filename);
+		ScriptBlock::ScriptHeader header;
+		stream->read(reinterpret_cast<char*>(&header), sizeof(ScriptBlock::ScriptHeader));
+		stream->close();
+		return header.lastModifiedTime;
+	}
 
 	void ScriptSerializerManager::saveAstToDisk(const String& filename, const AbstractNodeListPtr& ast) {
 		// A text script was just parsed. Save the compiled AST to disk
 		DataStreamPtr stream = mCacheArchive->create(filename);
 		ScriptSerializer* serializer = OGRE_NEW ScriptSerializer();
-		serializer->serialize(stream, ast);
+		size_t scriptTimestamp = ResourceGroupManager::getSingleton().resourceModifiedTime(mActiveResourceGroup, mActiveScriptName);
+		serializer->serialize(stream, ast, scriptTimestamp);
 		OGRE_DELETE serializer;
 		stream->close();
 	}
