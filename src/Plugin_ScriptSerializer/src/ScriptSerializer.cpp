@@ -22,12 +22,14 @@ namespace Ogre {
 		OGRE_DELETE stringTable;
 	}
 
-	void ScriptSerializer::serialize(const DataStreamPtr& stream, const AbstractNodeListPtr& ast) {
+	void ScriptSerializer::serialize(const DataStreamPtr& stream, const AbstractNodeListPtr& ast, size_t lastModifiedDate) {
 		blockIdCounter = 0;
 		stringTable->clear();
 
 		ScriptHeader header;
 		header.magic = magicCode;
+		header.version = version;
+		header.lastModifiedTime = lastModifiedDate;
 		header.stringTableOffset = 0;	// Will be overwritten later
 		writeToStream(stream, header);
 
@@ -168,7 +170,6 @@ namespace Ogre {
 		}
 	}
 
-	
 	AbstractNodeListPtr ScriptSerializer::deserialize(const DataStreamPtr& stream) {
 		AbstractNodeListPtr trees = AbstractNodeListPtr(OGRE_NEW_T(AbstractNodeList, MEMCATEGORY_GENERAL)(), SPFM_DELETE_T);
 		
@@ -178,6 +179,10 @@ namespace Ogre {
 		if (header.magic != magicCode) {
 			OGRE_EXCEPT(Exception::ERR_INTERNAL_ERROR, "Binary file is not in correct format: " + stream->getName(), "ScriptSerializer::deserialize");
 		}
+		else if (header.version != version) {
+			OGRE_EXCEPT(Exception::ERR_INVALID_STATE, "Binary script is in an older format.  Please reparse the script", "ScriptSerializer::deserialize");
+		}
+
 
 		// Seek to the string table 
 		stream->seek(header.stringTableOffset);
