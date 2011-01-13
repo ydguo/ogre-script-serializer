@@ -18,23 +18,20 @@ namespace Ogre {
 
 	/// @copydoc Plugin::install
 	void ScriptSerializerPlugin::install() {
-		LogManager::getSingleton().logMessage("Installing Script Serializer Plugin");
 	}
 	
 	/// @copydoc Plugin::initialise
 	void ScriptSerializerPlugin::initialise() {
-		LogManager::getSingleton().logMessage("Initializing Script Serializer Plugin");
 		mSerializeManager = OGRE_NEW ScriptSerializerManager();
 	}
 	
 	/// @copydoc Plugin::shutdown
 	void ScriptSerializerPlugin::shutdown() {
-		LogManager::getSingleton().logMessage("Shutting down Script Serializer Plugin");
+		OGRE_DELETE mSerializeManager;
 	}
 	
 	/// @copydoc Plugin::uninstall
 	void ScriptSerializerPlugin::uninstall() {
-		LogManager::getSingleton().logMessage("Uninstalling Script Serializer Plugin");
 	}
 
 }
