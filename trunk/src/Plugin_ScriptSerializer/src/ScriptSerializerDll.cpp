@@ -17,6 +17,7 @@ namespace Ogre
 	extern "C" void _ScriptSerializerExport dllStopPlugin(void)
 	{
 		Root::getSingleton().uninstallPlugin(plugin);
+		delete plugin; plugin = 0;
 	}
 }
 #endif

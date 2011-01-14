@@ -1,12 +1,14 @@
 #include "ScriptSerializerPreCompiled.h"
 #include "ScriptSerializerManager.h"
 #include "ScriptSerializer.h"
+#include "ShaderSerializer.h"
 #include "OgreScriptTranslator.h"
 #include "OgreZip.h"
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <direct.h>
 #include <sstream>
+
 using namespace std;
 
 namespace Ogre {
@@ -17,30 +19,25 @@ namespace Ogre {
 	/** The folder to save the compiled scripts in binary format */
 	const String scriptCacheFolder = ".scriptCache";
 
-	/** 
-	 * This class registers and listens to various resource and compilation events and 
-	 * handles loading/saving of the binary script from disk.  
-	 * A cache folder is created in the working directory where the compiled scripts are dumped 
-	 * to disk for later use. Whenever a text bases script is compiled, its AST in memory is saved to disk.
-	 * Later when this script needs to be compiled, it would be skipped in favour of its corresponding binary version
-	 * which is be directly loaded from disk and sent to the translators.
-	 * The text based scripts can also be replaced with the binary version by removing them 
-	 * and registering the cache folder in resources.cfg
-	 */
+	/** The filename to cache the shader microcodes */
+	const String shaderCacheFilename = "ShaderCache";
+
 	ScriptSerializerManager::ScriptSerializerManager()
 	{
 		mCompiler = OGRE_NEW ScriptCompiler();
-		initializeArchive(".scriptCache");
-		Ogre::ResourceGroupManager::getSingleton().addResourceGroupListener(this);
-		Ogre::ScriptCompilerManager::getSingleton().setListener(this);
+		initializeArchive(scriptCacheFolder);
+		initializeShaderCache();
+		ResourceGroupManager::getSingleton().addResourceGroupListener(this);
+		ScriptCompilerManager::getSingleton().setListener(this);
 
 		// Register the binary extension in the proper load order
-		Ogre::ScriptCompilerManager::getSingleton().addScriptPattern("*.program" + binaryScriptExtension);
-		Ogre::ScriptCompilerManager::getSingleton().addScriptPattern("*.material" + binaryScriptExtension);
-		Ogre::ScriptCompilerManager::getSingleton().addScriptPattern("*.particle" + binaryScriptExtension);
-		Ogre::ScriptCompilerManager::getSingleton().addScriptPattern("*.compositor" + binaryScriptExtension);
-	}
+		ScriptCompilerManager::getSingleton().addScriptPattern("*.program" + binaryScriptExtension);
+		ScriptCompilerManager::getSingleton().addScriptPattern("*.material" + binaryScriptExtension);
+		ScriptCompilerManager::getSingleton().addScriptPattern("*.particle" + binaryScriptExtension);
+		ScriptCompilerManager::getSingleton().addScriptPattern("*.compositor" + binaryScriptExtension);
 
+		
+	}
 
 	ScriptSerializerManager::~ScriptSerializerManager(void)
 	{
@@ -50,6 +47,7 @@ namespace Ogre {
 		}
 		mCacheArchive->unload();
 		OGRE_DELETE mCompiler;
+
 	}
 
 	void ScriptSerializerManager::initializeArchive(const String& archiveName) {
@@ -63,9 +61,40 @@ namespace Ogre {
 
 		mCacheArchive = ArchiveManager::getSingleton().load(archiveName, "FileSystem");
 	}
+	
+	void ScriptSerializerManager::initializeShaderCache() {
+#ifdef USE_MICROCODE_SHADERCACHE
+		mShaderSerializer = OGRE_NEW ShaderSerializer();
 
+		// Check if we the shaders have previously been cached
+		if (mCacheArchive->exists(shaderCacheFilename)) {
+			// A previously cached shader file exists.  load it
+			DataStreamPtr shaderCache = mCacheArchive->open(shaderCacheFilename);
+			mShaderSerializer->loadCache(shaderCache);
+			shaderCache->close();
+		}
+
+		// Start cache new shader code
+		mShaderSerializer->setCaching(true);
+#endif
+	}
+
+	void ScriptSerializerManager::saveShaderCache() {
+#ifdef USE_MICROCODE_SHADERCACHE
+		// A previously cached shader file exists.  load it
+		DataStreamPtr shaderCache = mCacheArchive->create(shaderCacheFilename);
+		mShaderSerializer->saveCache(shaderCache);
+		shaderCache->close();
+#endif
+	}
+	
 	void ScriptSerializerManager::resourceGroupScriptingStarted(const String& groupName, size_t scriptCount) {
 		mActiveResourceGroup = groupName;
+	}
+
+	void ScriptSerializerManager::resourceGroupScriptingEnded(const String& groupName) {
+		// Scripts for this resource group where just parsed.  save the shader cache to disk
+		saveShaderCache();
 	}
 
 

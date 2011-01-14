@@ -9,6 +9,7 @@ namespace Ogre
 	class ScriptSerializer;
 	class ScriptSerializerManager;
 	class ScriptSerializerPlugin;
+	class ShaderSerializer;
 
 	//-------------------------------------------
 	// Windows setttings
@@ -26,5 +27,11 @@ namespace Ogre
 #else
 #	define _ScriptSerializerExport
 #endif	// OGRE_WIN32
+
+	
+#if OGRE_VERSION_MAJOR > 1 || OGRE_VERSION_MINOR >= 8
+#	define USE_MICROCODE_SHADERCACHE
+#endif
+
 }
 
