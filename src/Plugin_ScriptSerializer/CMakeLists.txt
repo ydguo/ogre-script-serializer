@@ -7,6 +7,7 @@ set(PROJECT_HEADERS
   include/ScriptSerializerPlugin.h
   include/ScriptSerializerPreCompiled.h
   include/ScriptSerializerPrerequisites.h
+  include/ShaderSerializer.h
 )
 set(PROJECT_SOURCES
   src/ScriptSerializer.cpp
@@ -14,6 +15,7 @@ set(PROJECT_SOURCES
   src/ScriptSerializerManager.cpp
   src/ScriptSerializerPlugin.cpp
   src/ScriptSerializerPreCompiled.cpp
+  src/ShaderSerializer.cpp
 )
 
 set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: Debug, Release" FORCE)
