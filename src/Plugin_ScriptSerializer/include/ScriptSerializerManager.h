@@ -1,6 +1,8 @@
 #pragma once
 #include "OgreResourceGroupManager.h"
 #include "OgreScriptCompiler.h"
+#include <set>
+#include <map>
 
 namespace Ogre {
 
@@ -37,22 +39,29 @@ namespace Ogre {
 
 		/// Interface ScriptCompilerListener
 		virtual bool postConversion(ScriptCompiler *compiler, const AbstractNodeListPtr&);
+		virtual void handleError(ScriptCompiler *compiler, uint32 code, const String &file, int line, const String &msg);
 		
 
 	private:
-		void initializeArchive(const String& archiveName);
+		bool initializeArchive(const String& archiveName);
+		void initializeConfig(const String& configFileName);
 		void initializeShaderCache();
 		void saveShaderCache();
 		bool isBinaryScript(const String& filename);
-		void saveAstToDisk(const String& filename, const AbstractNodeListPtr& ast);
+		void saveAstToDisk(const String& filename, size_t scriptTimestamp, const AbstractNodeListPtr& ast);
 		AbstractNodeListPtr loadAstFromDisk(const String& filename);
 		time_t getBinaryTimeStamp(const String& filename);
 
 	private:
 		ScriptCompiler* mCompiler;
-		String mActiveScriptName;
 		String mActiveResourceGroup;
 		Archive* mCacheArchive;
+		typedef std::set<String> InvalidScriptList;
+		InvalidScriptList invalidScripts;
+		String binaryScriptExtension;
+		String scriptCacheLocation;
+		String shaderCacheFilename;
+		bool pluginEnabled;
 
 #ifdef USE_MICROCODE_SHADERCACHE
 		ShaderSerializer* mShaderSerializer;
