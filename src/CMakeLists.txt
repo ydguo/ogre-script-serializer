@@ -1,6 +1,16 @@
 set(PROJECT_LIB_DIRECTORY "${PROJECT_BINARY_DIR}/lib${LIB_SUFFIX}" CACHE STRING "Install path for libraries, e.g. 'lib64' on some 64-bit Linux distros.")
 mark_as_advanced(PROJECT_LIB_DIRECTORY)
 
+set(OGRE_INSTALL_DIR "" CACHE PATH "Location where Ogre SDK is installed")
+option(SERIALIZER_SUPPORT_CG "Build support for serializing Cg scripts" TRUE)
+option(SERIALIZER_SUPPORT_HLSL "Build support for serializing HSLS scripts" TRUE)
+option(SERIALIZER_SUPPORT_GLSL "Build support for serializing GLSL scripts" TRUE)
+option(SERIALIZER_SUPPORT_GLSLES "Build support for serializing GLSLES scripts" FALSE)
+
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: Debug, Release" FORCE)
+mark_as_advanced(CMAKE_BUILD_TYPE)
+
+
 # choose paths to build and install dependencies to
 if (NOT PROJECT_RUNTIME_OUTPUT)
   set(PROJECT_RUNTIME_OUTPUT ${PROJECT_BINARY_DIR}/bin)
@@ -45,7 +55,6 @@ endif ()
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: Debug, Release" FORCE)
 endif ()
-mark_as_advanced(CMAKE_BUILD_TYPE)
 
 # configure and install dependency LIBRARY
 # INCLUDE_DIR specifies where header files need to be installed
@@ -70,3 +79,17 @@ endmacro()
 
 
 add_subdirectory(Plugin_ScriptSerializer)
+
+if (SERIALIZER_SUPPORT_CG)
+	add_subdirectory(Plugin_ScriptSerializerSupport_Cg)
+endif ()
+if (SERIALIZER_SUPPORT_HLSL)
+	#add_subdirectory(Plugin_ScriptSerializerSupport_HLSL)
+endif ()
+if (SERIALIZER_SUPPORT_GLSL)
+	#add_subdirectory(Plugin_ScriptSerializerSupport_GLSL)
+endif ()
+if (SERIALIZER_SUPPORT_GLSLES)
+	#add_subdirectory(Plugin_ScriptSerializerSupport_GLSLES)
+endif ()
+

@@ -1,4 +1,4 @@
-#project(Plugin_ScriptSerializer)
+project(Plugin_ScriptSerializer)
 
 set(PROJECT_HEADERS
   include/ScriptSerializer.h
@@ -16,7 +16,6 @@ set(PROJECT_SOURCES
   src/ScriptSerializerPreCompiled.cpp
 )
 
-set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: Debug, Release" FORCE)
 set(OGRE_INSTALL_DIR "" CACHE STRING "Location where Ogre SDK is installed")
 set(OGRE_INCLUDE_DIR "${OGRE_INSTALL_DIR}/include/OGRE")
 set(OGRE_LIB_DIR_REL "${OGRE_INSTALL_DIR}/lib/Release")
