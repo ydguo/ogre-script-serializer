@@ -135,20 +135,9 @@ namespace Ogre {
 
 		// Skip further parsing of this script since its already been compiled
 		skipThisScript = true;
-
-		/*
-		// Log the ast for debugging
-		for(AbstractNodeList::iterator i = ast->begin(); i != ast->end(); ++i) {
-			String logFile = "parsed/" + scriptName + ".ast";
-			DataStreamPtr log = mCacheArchive->create(logFile);
-			logAST(log, 0, *i);
-			log->close();
-		}
-		*/
 	}
 	
 	bool ScriptSerializerManager::postConversion(ScriptCompiler *compiler, const AbstractNodeListPtr& ast) {
-		
 		String scriptName = ast->front()->file;
 
 		// Cache this AST only if there were no compilation errors
@@ -160,16 +149,6 @@ namespace Ogre {
 				size_t scriptTimestamp = ResourceGroupManager::getSingleton().resourceModifiedTime(mActiveResourceGroup, scriptName);
 				saveAstToDisk(binaryFilename, scriptTimestamp, ast);
 			}
-
-			/*
-			// Log the ast for debugging
-			for(AbstractNodeList::iterator i = ast->begin(); i != ast->end(); ++i) {
-				String logFile = "orig/" + scriptName + ".ast";
-				DataStreamPtr log = mCacheArchive->create(logFile);
-				logAST(log, 0, *i);
-				log->close();
-			}
-			*/
 		}
 
 		bool continueParsing = true;

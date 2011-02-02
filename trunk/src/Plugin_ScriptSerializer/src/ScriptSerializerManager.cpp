@@ -13,53 +13,54 @@ using namespace std;
 
 namespace Ogre {
 
-	/** The binary file's extension that would be appended to original filename */
-	const String binaryScriptExtension = ".sbin";
+	/** The filename of the config file */
+	const String configFileName = "ScriptCache.cfg";
 
-	/** The folder to save the compiled scripts in binary format */
-	const String scriptCacheFolder = ".scriptCache";
-
-	/** The filename to cache the shader microcodes */
-	const String shaderCacheFilename = "ShaderCache";
-
-	ScriptSerializerManager::ScriptSerializerManager()
+	ScriptSerializerManager::ScriptSerializerManager() : mCompiler(0)
 	{
-		mCompiler = OGRE_NEW ScriptCompiler();
-		initializeArchive(scriptCacheFolder);
-		initializeShaderCache();
-		ResourceGroupManager::getSingleton().addResourceGroupListener(this);
-		ScriptCompilerManager::getSingleton().setListener(this);
-
-		// Register the binary extension in the proper load order
-		ScriptCompilerManager::getSingleton().addScriptPattern("*.program" + binaryScriptExtension);
-		ScriptCompilerManager::getSingleton().addScriptPattern("*.material" + binaryScriptExtension);
-		ScriptCompilerManager::getSingleton().addScriptPattern("*.particle" + binaryScriptExtension);
-		ScriptCompilerManager::getSingleton().addScriptPattern("*.compositor" + binaryScriptExtension);
-
-		
+		initializeConfig(configFileName);
+		bool pluginEnabled = initializeArchive(scriptCacheLocation);
+		if (pluginEnabled) {
+			mCompiler = OGRE_NEW ScriptCompiler();
+			initializeShaderCache();
+			ResourceGroupManager::getSingleton().addResourceGroupListener(this);
+			ScriptCompilerManager::getSingleton().setListener(this);
+		}
 	}
 
 	ScriptSerializerManager::~ScriptSerializerManager(void)
 	{
-		Ogre::ResourceGroupManager::getSingleton().removeResourceGroupListener(this);
-		if (this == Ogre::ScriptCompilerManager::getSingleton().getListener()) {
-			Ogre::ScriptCompilerManager::getSingleton().setListener(0);
+		if (pluginEnabled) {
+			Ogre::ResourceGroupManager::getSingleton().removeResourceGroupListener(this);
+			if (this == Ogre::ScriptCompilerManager::getSingleton().getListener()) {
+				Ogre::ScriptCompilerManager::getSingleton().setListener(0);
+			}
+			mCacheArchive->unload();
+			OGRE_DELETE mCompiler;
 		}
-		mCacheArchive->unload();
-		OGRE_DELETE mCompiler;
-
 	}
 
-	void ScriptSerializerManager::initializeArchive(const String& archiveName) {
+	bool ScriptSerializerManager::initializeArchive(const String& archiveName) {
 		// Check if the directory exists
 		struct stat dirInfo;
 		int status = stat(archiveName.c_str(), &dirInfo);
 		if (status) {
 			// Directory does not exist. Create one
-			mkdir(archiveName.c_str());
+			int error = mkdir(archiveName.c_str());
+			if (error) {
+				LogManager::getSingleton().logMessage("WARNING: Failed to create Script Cache directory.  Script cache plugin disabled");
+				return false;
+			}
 		}
 
 		mCacheArchive = ArchiveManager::getSingleton().load(archiveName, "FileSystem");
+		
+		if (mCacheArchive->isReadOnly()) {
+			LogManager::getSingleton().logMessage("WARNING: Failed to write to Script Cache directory.  Script Cache plugin disabled");
+			return false;
+		}
+
+		return true;
 	}
 	
 	void ScriptSerializerManager::initializeShaderCache() {
@@ -99,8 +100,6 @@ namespace Ogre {
 
 
 	void ScriptSerializerManager::scriptParseStarted(const String& scriptName, bool& skipThisScript) {
-		mActiveScriptName = scriptName;
-
 		// Check if the binary version is being requested for parsing
 		String binaryFilename;
 		if (isBinaryScript(scriptName)) {
@@ -108,6 +107,9 @@ namespace Ogre {
 			binaryFilename = scriptName;
 		}
 		else {
+			// Clear compilation error flags, if any.  This script might have been re-parsed after corrections
+			invalidScripts.erase(scriptName);
+
 			// This is a text based script.  Check if the compiled version is unavailable
 			binaryFilename = scriptName + binaryScriptExtension;
 			if (!mCacheArchive->exists(binaryFilename)) {
@@ -135,18 +137,30 @@ namespace Ogre {
 		// Skip further parsing of this script since its already been compiled
 		skipThisScript = true;
 	}
-
+	
 	bool ScriptSerializerManager::postConversion(ScriptCompiler *compiler, const AbstractNodeListPtr& ast) {
-		if (!isBinaryScript(mActiveScriptName)) {
-			// A text script was just parsed. Save the compiled AST to disk
-			String binaryFilename = mActiveScriptName + binaryScriptExtension;
-			saveAstToDisk(binaryFilename, ast);
+		String scriptName = ast->front()->file;
+
+		// Cache this AST only if there were no compilation errors
+		bool isValid = (invalidScripts.count(scriptName) == 0);
+		if (isValid) {
+			if (!isBinaryScript(scriptName)) {
+				// A text script was just parsed. Save the compiled AST to disk
+				String binaryFilename = scriptName + binaryScriptExtension;
+				size_t scriptTimestamp = ResourceGroupManager::getSingleton().resourceModifiedTime(mActiveResourceGroup, scriptName);
+				saveAstToDisk(binaryFilename, scriptTimestamp, ast);
+			}
 		}
 
 		bool continueParsing = true;
 		return continueParsing;
 	}
+
 	
+	void ScriptSerializerManager::handleError(ScriptCompiler *compiler, uint32 code, const String &file, int line, const String &msg) {
+		invalidScripts.insert(file);
+	}
+
 	time_t ScriptSerializerManager::getBinaryTimeStamp(const String& filename) {
 		DataStreamPtr stream = mCacheArchive->open(filename);
 		ScriptBlock::ScriptHeader header;
@@ -155,11 +169,10 @@ namespace Ogre {
 		return header.lastModifiedTime;
 	}
 
-	void ScriptSerializerManager::saveAstToDisk(const String& filename, const AbstractNodeListPtr& ast) {
+	void ScriptSerializerManager::saveAstToDisk(const String& filename, size_t scriptTimestamp, const AbstractNodeListPtr& ast) {
 		// A text script was just parsed. Save the compiled AST to disk
 		DataStreamPtr stream = mCacheArchive->create(filename);
 		ScriptSerializer* serializer = OGRE_NEW ScriptSerializer();
-		size_t scriptTimestamp = ResourceGroupManager::getSingleton().resourceModifiedTime(mActiveResourceGroup, mActiveScriptName);
 		serializer->serialize(stream, ast, scriptTimestamp);
 		OGRE_DELETE serializer;
 		stream->close();
@@ -183,4 +196,32 @@ namespace Ogre {
 		return false;
 	}
 
+	
+	void ScriptSerializerManager::initializeConfig(const String& configFileName) {
+		ConfigFile configFile;
+		Archive* workingDirectory =  ArchiveManager::getSingleton().load(".", "FileSystem");
+		if (workingDirectory->exists(configFileName)) {
+			DataStreamPtr configStream = workingDirectory->open(configFileName);
+			configFile.load(configStream);
+			configStream->close();
+		}
+		else {
+			stringstream message;
+			message << "WARNING: Cannot find Script Cache config file:" << configFileName << ". Using default values";
+			LogManager::getSingleton().logMessage(message.str());
+		}
+
+		binaryScriptExtension = configFile.getSetting("extension", "ScriptCache", ".sbin");
+		scriptCacheLocation = configFile.getSetting("location", "ScriptCache", ".scriptCache");
+		shaderCacheFilename = configFile.getSetting("filename", "ShaderCache", "ShaderCache");
+		String searchExtensions = configFile.getSetting("searchExtensions", "ScriptCache", "program material particle compositor os pu");
+
+		istringstream extensions(searchExtensions);
+		String extension;
+		while (extensions >> extension) {
+			stringstream pattern;
+			pattern << "*." << extension << binaryScriptExtension;
+			ScriptCompilerManager::getSingleton().addScriptPattern(pattern.str());
+		}
+	}
 }
