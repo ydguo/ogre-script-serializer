@@ -99,8 +99,6 @@ namespace Ogre {
 
 
 	void ScriptSerializerManager::scriptParseStarted(const String& scriptName, bool& skipThisScript) {
-		mActiveScriptName = scriptName;
-
 		// Check if the binary version is being requested for parsing
 		String binaryFilename;
 		if (isBinaryScript(scriptName)) {
@@ -108,6 +106,9 @@ namespace Ogre {
 			binaryFilename = scriptName;
 		}
 		else {
+			// Clear compilation error flags, if any.  This script might have been re-parsed after corrections
+			invalidScripts.erase(scriptName);
+
 			// This is a text based script.  Check if the compiled version is unavailable
 			binaryFilename = scriptName + binaryScriptExtension;
 			if (!mCacheArchive->exists(binaryFilename)) {
@@ -134,18 +135,106 @@ namespace Ogre {
 
 		// Skip further parsing of this script since its already been compiled
 		skipThisScript = true;
-	}
 
+		/*
+		// Log the ast for debugging
+		for(AbstractNodeList::iterator i = ast->begin(); i != ast->end(); ++i) {
+			String logFile = "parsed/" + scriptName + ".ast";
+			DataStreamPtr log = mCacheArchive->create(logFile);
+			logAST(log, 0, *i);
+			log->close();
+		}
+		*/
+	}
+	
 	bool ScriptSerializerManager::postConversion(ScriptCompiler *compiler, const AbstractNodeListPtr& ast) {
-		if (!isBinaryScript(mActiveScriptName)) {
-			// A text script was just parsed. Save the compiled AST to disk
-			String binaryFilename = mActiveScriptName + binaryScriptExtension;
-			saveAstToDisk(binaryFilename, ast);
+		
+		String scriptName = ast->front()->file;
+
+		// Cache this AST only if there were no compilation errors
+		bool isValid = (invalidScripts.count(scriptName) == 0);
+		if (isValid) {
+			if (!isBinaryScript(scriptName)) {
+				// A text script was just parsed. Save the compiled AST to disk
+				String binaryFilename = scriptName + binaryScriptExtension;
+				size_t scriptTimestamp = ResourceGroupManager::getSingleton().resourceModifiedTime(mActiveResourceGroup, scriptName);
+				saveAstToDisk(binaryFilename, scriptTimestamp, ast);
+			}
+
+			/*
+			// Log the ast for debugging
+			for(AbstractNodeList::iterator i = ast->begin(); i != ast->end(); ++i) {
+				String logFile = "orig/" + scriptName + ".ast";
+				DataStreamPtr log = mCacheArchive->create(logFile);
+				logAST(log, 0, *i);
+				log->close();
+			}
+			*/
 		}
 
 		bool continueParsing = true;
 		return continueParsing;
 	}
+
+	
+	void ScriptSerializerManager::handleError(ScriptCompiler *compiler, uint32 code, const String &file, int line, const String &msg) {
+		invalidScripts.insert(file);
+	}
+
+	
+	void ScriptSerializerManager::logAST(DataStreamPtr log, int tabs, const AbstractNodePtr &node)
+	{
+		String msg = "";
+		for(int i = 0; i < tabs; ++i)
+			msg += "\t";
+
+		switch(node->type)
+		{
+		case ANT_ATOM:
+			{
+				AtomAbstractNode *atom = reinterpret_cast<AtomAbstractNode*>(node.get());
+				msg = msg + atom->value;
+			}
+			break;
+		case ANT_PROPERTY:
+			{
+				PropertyAbstractNode *prop = reinterpret_cast<PropertyAbstractNode*>(node.get());
+				msg = msg + prop->name + " =";
+				for(AbstractNodeList::iterator i = prop->values.begin(); i != prop->values.end(); ++i)
+				{
+					if((*i)->type == ANT_ATOM)
+						msg = msg + " " + reinterpret_cast<AtomAbstractNode*>((*i).get())->value;
+				}
+			}
+			break;
+		case ANT_OBJECT:
+			{
+				ObjectAbstractNode *obj = reinterpret_cast<ObjectAbstractNode*>(node.get());
+				msg = msg + node->file + " - " + StringConverter::toString(node->line) + " - " + obj->cls + " \"" + obj->name + "\" =";
+				for(AbstractNodeList::iterator i = obj->values.begin(); i != obj->values.end(); ++i)
+				{
+					if((*i)->type == ANT_ATOM)
+						msg = msg + " " + reinterpret_cast<AtomAbstractNode*>((*i).get())->value;
+				}
+			}
+			break;
+		default:
+			msg = msg + "Unacceptable node type: " + StringConverter::toString(node->type);
+		}
+
+		msg += "\r\n";
+		log->write(msg.c_str(), msg.length());
+
+		if(node->type == ANT_OBJECT)
+		{
+			ObjectAbstractNode *obj = reinterpret_cast<ObjectAbstractNode*>(node.get());
+			for(AbstractNodeList::iterator i = obj->children.begin(); i != obj->children.end(); ++i)
+			{
+				logAST(log, tabs + 1, *i);
+			}
+		}
+	}
+
 	
 	time_t ScriptSerializerManager::getBinaryTimeStamp(const String& filename) {
 		DataStreamPtr stream = mCacheArchive->open(filename);
@@ -155,11 +244,10 @@ namespace Ogre {
 		return header.lastModifiedTime;
 	}
 
-	void ScriptSerializerManager::saveAstToDisk(const String& filename, const AbstractNodeListPtr& ast) {
+	void ScriptSerializerManager::saveAstToDisk(const String& filename, size_t scriptTimestamp, const AbstractNodeListPtr& ast) {
 		// A text script was just parsed. Save the compiled AST to disk
 		DataStreamPtr stream = mCacheArchive->create(filename);
 		ScriptSerializer* serializer = OGRE_NEW ScriptSerializer();
-		size_t scriptTimestamp = ResourceGroupManager::getSingleton().resourceModifiedTime(mActiveResourceGroup, mActiveScriptName);
 		serializer->serialize(stream, ast, scriptTimestamp);
 		OGRE_DELETE serializer;
 		stream->close();
