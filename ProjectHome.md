@@ -1,0 +1,1 @@
+Serializes ogre script by dumping the AST from memory to disk and back
